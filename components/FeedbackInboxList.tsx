@@ -1,0 +1,603 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+
+type Sentiment = "POS" | "NEU" | "NEG";
+type FeedbackStatus = "NEW" | "REVIEWED" | "ACTIONED";
+type Priority = "LOW" | "MEDIUM" | "HIGH";
+
+interface FeedbackThemeLink {
+  confidence: number;
+  theme: {
+    id: string;
+    name: string;
+    color: string | null;
+  };
+}
+
+interface FeedbackItem {
+  id: string;
+  content: string;
+  channel: string;
+  sourceRef: string | null;
+  customerLabel: string | null;
+  sentiment: Sentiment;
+  sentimentScore: number;
+  status: FeedbackStatus;
+  priority: Priority;
+  createdAt: string;
+  feedbackThemes: FeedbackThemeLink[];
+}
+
+interface FeedbackInboxListProps {
+  initialItems: FeedbackItem[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+  channels: string[];
+  themes: { id: string; name: string }[];
+  currentRole: string;
+}
+
+export default function FeedbackInboxList({
+  initialItems,
+  pagination,
+  channels,
+  themes,
+  currentRole,
+}: FeedbackInboxListProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Local feedback list state to support optimistic UI updates
+  const [items, setItems] = useState<FeedbackItem[]>(initialItems);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [reclassifyingId, setReclassifyingId] = useState<string | null>(null);
+
+  // Filter local states
+  const [search, setSearch] = useState(searchParams.get("search") || "");
+  const [channel, setChannel] = useState(searchParams.get("channel") || "");
+  const [sentiment, setSentiment] = useState(searchParams.get("sentiment") || "");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
+  const [themeId, setThemeId] = useState(searchParams.get("themeId") || "");
+  const [priority, setPriority] = useState(searchParams.get("priority") || "");
+
+  const isReadOnly = currentRole === "VIEWER";
+
+  const handleApplyFilters = (updates: Record<string, string>) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", "1"); // Reset to page 1 on filter changes
+
+    Object.entries(updates).forEach(([key, val]) => {
+      if (val) {
+        params.set(key, val);
+      } else {
+        params.delete(key);
+      }
+    });
+
+    router.push(`/dashboard/inbox?${params.toString()}`);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", newPage.toString());
+    router.push(`/dashboard/inbox?${params.toString()}`);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleApplyFilters({ search });
+  };
+
+  const handleStatusChange = async (id: string, newStatus: FeedbackStatus) => {
+    if (isReadOnly) return;
+    setUpdatingId(id);
+
+    try {
+      const res = await fetch(`/api/feedback/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.ok) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === id ? { ...item, status: newStatus } : item
+          )
+        );
+        toast.success("Status updated successfully");
+      } else {
+        const err = await res.json();
+        toast.error(`Failed to update status: ${err.error || "Unknown error"}`);
+      }
+    } catch {
+      toast.error("Network error updating status");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleDeleteFeedback = async (id: string) => {
+    if (isReadOnly) return;
+    if (!confirm("Are you sure you want to delete this feedback item?")) return;
+
+    setUpdatingId(id);
+
+    try {
+      const res = await fetch(`/api/feedback/${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast.success("Feedback deleted successfully");
+        setItems((prev) => prev.filter((item) => item.id !== id));
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to delete feedback");
+      }
+    } catch {
+      toast.error("Network error deleting feedback");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (items.length === 0) {
+      toast.error("No feedback items to export");
+      return;
+    }
+
+    try {
+      const headers = ["ID", "Content", "Channel", "Customer Label", "Sentiment", "Sentiment Score", "Status", "Priority", "Created At"];
+
+      const rows = items.map(item => [
+        item.id,
+        `"${item.content.replace(/"/g, '""')}"`,
+        item.channel,
+        item.customerLabel ? `"${item.customerLabel.replace(/"/g, '""')}"` : "",
+        item.sentiment,
+        item.sentimentScore.toFixed(4),
+        item.status,
+        item.priority,
+        item.createdAt
+      ]);
+
+      const csvString = [
+        headers.join(","),
+        ...rows.map(row => row.join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `loop_feedback_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success("CSV file exported successfully");
+    } catch {
+      toast.error("Failed to export CSV");
+    }
+  };
+
+  const handleReclassify = async (id: string) => {
+    if (isReadOnly) return;
+    setReclassifyingId(id);
+
+    try {
+      const res = await fetch(`/api/feedback/${id}/reclassify`, {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                ...item,
+                sentiment: data.sentiment,
+                sentimentScore: data.sentimentScore,
+                feedbackThemes: data.feedbackThemes,
+              }
+              : item
+          )
+        );
+        toast.success("AI reclassification completed");
+      } else {
+        const err = await res.json();
+        toast.error(`Failed to reclassify: ${err.error || "Unknown error"}`);
+      }
+    } catch {
+      toast.error("Network error running reclassification");
+    } finally {
+      setReclassifyingId(null);
+    }
+  };
+
+  const getSentimentBadge = (sent: Sentiment) => {
+    switch (sent) {
+      case "POS":
+        return <span className="bg-status-pos/10 text-status-pos border border-status-pos/20 px-2 py-0.5 rounded text-[10px] font-bold">POS</span>;
+      case "NEG":
+        return <span className="bg-status-neg/10 text-status-neg border border-status-neg/20 px-2 py-0.5 rounded text-[10px] font-bold">NEG</span>;
+      default:
+        return <span className="bg-status-neu/10 text-status-neu border border-status-neu/20 px-2 py-0.5 rounded text-[10px] font-bold">NEU</span>;
+    }
+  };
+
+  const getStatusBadgeColor = (stat: FeedbackStatus) => {
+    switch (stat) {
+      case "NEW":
+        return "bg-status-neu/10 text-status-neu border border-status-neu/20";
+      case "REVIEWED":
+        return "bg-status-info/10 text-status-info border border-status-info/20";
+      case "ACTIONED":
+        return "bg-status-pos/10 text-status-pos border border-status-pos/20";
+      default:
+        return "bg-slate-500/10 text-text-secondary border border-slate-500/20";
+    }
+  };
+
+  const getThemeBadgeColor = (colorName: string | null) => {
+    switch (colorName) {
+      case "indigo":
+        return "bg-primary/10 text-primary border border-primary/20";
+      case "purple":
+        return "bg-ai-accent/10 text-ai-accent border border-ai-accent/20";
+      case "emerald":
+        return "bg-status-pos/10 text-status-pos border border-status-pos/20";
+      case "red":
+        return "bg-status-neg/10 text-status-neg border border-status-neg/20";
+      case "orange":
+        return "bg-status-neu/10 text-status-neu border border-status-neu/20";
+      default:
+        return "bg-slate-500/10 text-text-secondary border border-slate-500/20";
+    }
+  };
+
+  const handleClearAllFilters = () => {
+    setSearch("");
+    setChannel("");
+    setSentiment("");
+    setStatusFilter("");
+    setThemeId("");
+    setPriority("");
+    router.push("/dashboard/inbox");
+  };
+
+  const getPriorityBadge = (pri: Priority) => {
+    switch (pri) {
+      case "HIGH":
+        return <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded text-[10px] font-bold">HIGH</span>;
+      case "MEDIUM":
+        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-bold">MEDIUM</span>;
+      default:
+        return <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded text-[10px] font-bold">LOW</span>;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Search and Filters Bar */}
+      <div className="p-4 rounded-xl bg-card-custom border border-card-border shadow-sm space-y-4">
+        {/* Search */}
+        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Search feedback content..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-background border border-card-border rounded-lg pl-10 pr-4 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-primary"
+            />
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.602 10.602Z" />
+              </svg>
+            </span>
+          </div>
+          <button
+            type="submit"
+            className="bg-primary hover:bg-primary-hover text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors cursor-pointer"
+          >
+            Search
+          </button>
+        </form>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Channel filter */}
+            <select
+              value={channel}
+              onChange={(e) => {
+                setChannel(e.target.value);
+                handleApplyFilters({ channel: e.target.value });
+              }}
+              className="bg-background border border-card-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-primary min-w-[130px]"
+            >
+              <option value="">All Channels</option>
+              {channels.map((ch) => (
+                <option key={ch} value={ch}>
+                  {ch}
+                </option>
+              ))}
+            </select>
+
+            {/* Sentiment filter */}
+            <select
+              value={sentiment}
+              onChange={(e) => {
+                setSentiment(e.target.value);
+                handleApplyFilters({ sentiment: e.target.value });
+              }}
+              className="bg-background border border-card-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-primary min-w-[130px]"
+            >
+              <option value="">All Sentiments</option>
+              <option value="POS">Positive</option>
+              <option value="NEU">Neutral</option>
+              <option value="NEG">Negative</option>
+            </select>
+
+            {/* Status filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                handleApplyFilters({ status: e.target.value });
+              }}
+              className="bg-background border border-card-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-primary min-w-[130px]"
+            >
+              <option value="">All Statuses</option>
+              <option value="NEW">New</option>
+              <option value="REVIEWED">Reviewed</option>
+              <option value="ACTIONED">Actioned</option>
+            </select>
+
+            {/* Theme filter */}
+            <select
+              value={themeId}
+              onChange={(e) => {
+                setThemeId(e.target.value);
+                handleApplyFilters({ themeId: e.target.value });
+              }}
+              className="bg-background border border-card-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-primary min-w-[150px] max-w-[220px]"
+            >
+              <option value="">All Themes</option>
+              {themes.map((th) => (
+                <option key={th.id} value={th.id}>
+                  {th.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Priority filter */}
+            <select
+              value={priority}
+              onChange={(e) => {
+                setPriority(e.target.value);
+                handleApplyFilters({ priority: e.target.value });
+              }}
+              className="bg-background border border-card-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-primary min-w-[130px]"
+            >
+              <option value="">All Priorities</option>
+              <option value="HIGH">High Priority</option>
+              <option value="MEDIUM">Medium Priority</option>
+              <option value="LOW">Low Priority</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportCSV}
+              className="bg-card-custom border border-card-border hover:border-text-secondary text-text-secondary hover:text-text-primary px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Export filtered feedback as CSV"
+            >
+              📥 Export CSV
+            </button>
+
+            {/* Clear Filters */}
+            {(search || channel || sentiment || statusFilter || themeId || priority) && (
+              <button
+                onClick={handleClearAllFilters}
+                className="text-xs text-text-muted hover:text-text-secondary font-bold underline cursor-pointer"
+              >
+                Clear All Filters
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Table List Container */}
+      <div className="bg-card-custom border border-card-border rounded-xl shadow-sm overflow-hidden">
+        {items.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-card-border bg-background/50 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                  <th className="py-3 px-6 w-24">Sentiment</th>
+                  <th className="py-3 px-6 w-24">Priority</th>
+                  <th className="py-3 px-6">Feedback Content</th>
+                  <th className="py-3 px-6 w-44">Channel / Customer</th>
+                  <th className="py-3 px-6 w-48">Themes</th>
+                  <th className="py-3 px-6 w-36">Status</th>
+                  {!isReadOnly && <th className="py-3 px-6 w-20 text-center">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-card-border text-sm text-text-secondary">
+                {items.map((item) => (
+                  <tr key={item.id} className="hover:bg-background/30 transition-colors">
+                    {/* Sentiment Cell */}
+                    <td className="py-4 px-6">
+                      <div className="flex flex-col gap-1">
+                        {getSentimentBadge(item.sentiment)}
+                        <span className="text-[10px] text-text-muted font-bold text-center">
+                          {item.sentimentScore > 0 ? "+" : ""}{item.sentimentScore.toFixed(2)}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Priority Cell */}
+                    <td className="py-4 px-6">
+                      {getPriorityBadge(item.priority)}
+                    </td>
+
+                    {/* Content Cell */}
+                    <td className="py-4 px-6 font-normal text-text-primary leading-relaxed">
+                      <p className="whitespace-pre-wrap max-w-xl">{item.content}</p>
+                      <p className="text-[10px] text-text-muted mt-1.5 flex items-center gap-2">
+                        <span>📅 {new Date(item.createdAt).toLocaleString()}</span>
+                        {item.sourceRef && (
+                          <span className="bg-background px-1.5 py-0.2 rounded border border-card-border text-[9px]">
+                            Ref: {item.sourceRef}
+                          </span>
+                        )}
+                      </p>
+                    </td>
+
+                    {/* Channel & Customer Cell */}
+                    <td className="py-4 px-6">
+                      <div className="space-y-1">
+                        <span className="inline-block text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                          {item.channel}
+                        </span>
+                        {item.customerLabel && (
+                          <p className="text-xs text-text-muted truncate max-w-[150px]">
+                            👤 {item.customerLabel}
+                          </p>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Themes Cell */}
+                    <td className="py-4 px-6">
+                      <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+                        {item.feedbackThemes.length > 0 ? (
+                          item.feedbackThemes.map((ft) => (
+                            <span
+                              key={ft.theme.id}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded truncate ${getThemeBadgeColor(ft.theme.color)}`}
+                              title={`${ft.theme.name} (${Math.round(ft.confidence * 100)}% confidence)`}
+                            >
+                              {ft.theme.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-text-muted italic">Unclassified</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Status Cell */}
+                    <td className="py-4 px-6">
+                      {isReadOnly ? (
+                        <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full uppercase border ${getStatusBadgeColor(item.status)}`}>
+                          {item.status}
+                        </span>
+                      ) : (
+                        <div className="relative inline-block">
+                          <select
+                            disabled={updatingId === item.id || reclassifyingId === item.id}
+                            value={item.status}
+                            onChange={(e) => handleStatusChange(item.id, e.target.value as FeedbackStatus)}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase border outline-none bg-card-custom cursor-pointer disabled:opacity-50 transition-colors ${getStatusBadgeColor(item.status)}`}
+                          >
+                            <option value="NEW" className="bg-card-custom text-status-neu">New</option>
+                            <option value="REVIEWED" className="bg-card-custom text-status-info">Reviewed</option>
+                            <option value="ACTIONED" className="bg-card-custom text-status-pos">Actioned</option>
+                          </select>
+                          {updatingId === item.id && (
+                            <span className="absolute -right-6 top-1/2 -translate-y-1/2 flex h-3.5 w-3.5 items-center justify-center">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                            </span>
+                          )}
+                          {!isReadOnly && (
+                            <button
+                              disabled={updatingId === item.id || reclassifyingId === item.id}
+                              onClick={() => handleReclassify(item.id)}
+                              className="text-[10px] text-primary hover:text-primary-hover font-semibold block mt-1 hover:underline disabled:opacity-50 text-left cursor-pointer"
+                            >
+                              {reclassifyingId === item.id ? "Classifying..." : "⚡ Re-classify"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    {!isReadOnly && (
+                      <td className="py-4 px-6 text-center">
+                        <button
+                          disabled={updatingId === item.id || reclassifyingId === item.id}
+                          onClick={() => handleDeleteFeedback(item.id)}
+                          className="text-text-muted hover:text-status-neg transition-colors p-1 cursor-pointer disabled:opacity-50"
+                          title="Delete Feedback"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                          </svg>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-16 flex flex-col items-center justify-center text-center space-y-3">
+            <span className="text-text-muted">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0-3-3m3 3 3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+              </svg>
+            </span>
+            <p className="text-sm font-semibold text-text-primary">No feedback items found</p>
+            <p className="text-xs text-text-muted max-w-xs">
+              Try adjusting your search criteria or filter dropdowns to find matching records.
+            </p>
+          </div>
+        )}
+
+        {/* Pagination Footer */}
+        {pagination.totalPages > 1 && (
+          <div className="p-4 border-t border-card-border flex items-center justify-between bg-background/30 text-xs">
+            <p className="text-text-muted">
+              Showing <span className="font-semibold text-text-primary">{(pagination.page - 1) * pagination.limit + 1}</span> to{" "}
+              <span className="font-semibold text-text-primary">
+                {Math.min(pagination.page * pagination.limit, pagination.total)}
+              </span>{" "}
+              of <span className="font-semibold text-text-primary">{pagination.total}</span> items
+            </p>
+            <div className="flex gap-2">
+              <button
+                disabled={pagination.page <= 1}
+                onClick={() => handlePageChange(pagination.page - 1)}
+                className="bg-card-custom border border-card-border text-text-primary px-3 py-1.5 rounded-lg hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold cursor-pointer"
+              >
+                Previous
+              </button>
+              <button
+                disabled={pagination.page >= pagination.totalPages}
+                onClick={() => handlePageChange(pagination.page + 1)}
+                className="bg-card-custom border border-card-border text-text-primary px-3 py-1.5 rounded-lg hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold cursor-pointer"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
