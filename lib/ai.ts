@@ -117,21 +117,19 @@ export async function answerQuestion(
 ): Promise<string> {
   const hasApiKey = !!process.env.GROQ_API_KEY;
 
-  if (feedbacks.length === 0) {
-    return "I couldn't find any feedback in your workspace related to this topic. Grounding is mandatory, so I cannot formulate an answer.";
-  }
-
   if (hasApiKey) {
     try {
-      const context = feedbacks
-        .map((f, i) => `[Source ${i + 1}] (${f.channel}${f.customerLabel ? `, User: ${f.customerLabel}` : ""}): "${f.content}"`)
-        .join("\n\n");
+      const context = feedbacks.length > 0
+        ? feedbacks
+            .map((f, i) => `[Source ${i + 1}] (${f.channel}${f.customerLabel ? `, User: ${f.customerLabel}` : ""}): "${f.content}"`)
+            .join("\n\n")
+        : "No feedback context available.";
 
-      const prompt = `You are Ask LOOP, an AI assistant. You answer questions about customer feedback using ONLY the provided feedback context.
-Do NOT assume or make up anything not explicitly mentioned in the feedback. Grounding is mandatory.
-If the answer cannot be found in the provided feedback, state exactly: "I cannot find an answer in the feedback provided."
+      const prompt = `You are Ask LOOP, an AI assistant. You answer questions for the product workspace.
 
-Format your answer with clear bullet points. Cite your sources using [Source X] notation corresponding to the feedback index.
+If the user's question is about customer feedback, feature requests, bugs, billing, or workspace metrics, you MUST base your answer strictly on the provided Feedback Context and cite your sources using [Source X] notation matching the indices. Do not assume or make up details.
+
+If the user's question is a general query (like greetings, writing code, general trivia, history, or basic conversation), you can answer it directly using your general knowledge. If you answer using general knowledge, do not cite any sources.
 
 Question: "${question}"
 
@@ -158,13 +156,17 @@ ${context}`;
     const words = qLower.split(/\s+/).filter(w => w.length > 3);
     const hasMatch = words.some(word => f.content.toLowerCase().includes(word));
     
-    if (hasMatch || feedbacks.length <= 3) {
+    if (hasMatch) {
       matchedQuotes.push(`- "${f.content}" (reported via **${f.channel}** by *${f.customerLabel || "Anonymous"}* [Source ${idx + 1}])`);
     }
   });
 
   if (matchedQuotes.length === 0) {
-    return "I cannot find an answer in the feedback provided. (None of the retrieved records directly match the keywords of your question).";
+    if (qLower.includes("hello") || qLower.includes("hi ") || qLower.includes("hey")) {
+      return "Hello! I am Ask LOOP, your customer feedback analyst. How can I help you explore your workspace insights today?";
+    }
+    return `I cannot find any specific customer feedback matching the keywords in your question ("${question}"). 
+To query feedback, please ask about topics like onboarding, billing, or security. If you are asking a general question, note that general chat is optimized when the AI engine is online.`;
   }
 
   return `Based on the customer feedback retrieved for this query:

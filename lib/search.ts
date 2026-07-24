@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { getEmbedding } from "./embeddings";
 
 // Basic stop words to ignore when performing search ranking
 const STOP_WORDS = new Set([
@@ -23,19 +24,75 @@ const STOP_WORDS = new Set([
   "yourself", "yourselves"
 ]);
 
+interface FeedbackRow {
+  id: string;
+  content: string;
+  channel: string;
+  sourceRef: string | null;
+  source_ref?: string | null;
+  customerLabel: string | null;
+  customer_label?: string | null;
+  sentiment: "POS" | "NEU" | "NEG";
+  sentimentScore: number;
+  sentiment_score?: number;
+  status: "NEW" | "REVIEWED" | "ACTIONED";
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  createdAt: string | Date;
+  created_at?: string | Date;
+  updatedAt: string | Date;
+  updated_at?: string | Date;
+  workspaceId: string;
+  workspace_id?: string;
+}
+
 export async function retrieveFeedback(
   workspaceId: string,
   query: string,
   limit = 5
 ) {
-  // 1. Clean query and extract keywords
+  try {
+    // 1. Generate query embedding vector
+    const queryVector = await getEmbedding(query);
+    const vectorString = `[${queryVector.join(",")}]`;
+
+    // 2. Query Postgres using pgvector cosine similarity (<=> operator)
+    const results = await prisma.$queryRaw<FeedbackRow[]>`
+      SELECT f.*
+      FROM "Feedback" f
+      JOIN "Embedding" e ON e."feedbackId" = f.id
+      WHERE f."workspaceId" = ${workspaceId}
+      ORDER BY (e.vector <=> ${vectorString}::vector) ASC
+      LIMIT ${limit};
+    `;
+
+    if (results && results.length > 0) {
+      // Safely map db keys to standard Prisma camelCase format
+      return results.map((row) => ({
+        id: row.id,
+        content: row.content,
+        channel: row.channel,
+        sourceRef: row.sourceRef ?? row.source_ref ?? null,
+        customerLabel: row.customerLabel ?? row.customer_label ?? null,
+        sentiment: row.sentiment,
+        sentimentScore: Number(row.sentimentScore ?? row.sentiment_score ?? 0),
+        status: row.status,
+        priority: row.priority,
+        createdAt: new Date(row.createdAt ?? row.created_at),
+        updatedAt: new Date(row.updatedAt ?? row.updated_at),
+        workspaceId: row.workspaceId ?? row.workspace_id,
+      }));
+    }
+  } catch (err) {
+    console.error("Vector similarity search failed, falling back to keyword search:", err);
+  }
+
+  // 3. Fallback Keyword Search
   const keywords = query
     .toLowerCase()
     .replace(/[^\w\s]/g, "")
     .split(/\s+/)
     .filter((word) => word.length > 2 && !STOP_WORDS.has(word));
 
-  // 2. Query workspace feedback items
   const feedbackItems = await prisma.feedback.findMany({
     where: {
       workspaceId,
@@ -50,30 +107,26 @@ export async function retrieveFeedback(
   });
 
   if (keywords.length === 0) {
-    // Fallback if no keywords found: return top 5 items
     return feedbackItems.slice(0, limit);
   }
 
-  // 3. Score and rank items based on keyword matches
   const scoredItems = feedbackItems.map((item) => {
     const contentLower = item.content.toLowerCase();
     let score = 0;
 
     keywords.forEach((keyword) => {
-      // Direct keyword count
       const regex = new RegExp(`\\b${keyword}\\b`, "g");
       const matches = contentLower.match(regex);
       if (matches) {
-        score += matches.length * 2; // Keyword match bonus
+        score += matches.length * 2;
       } else if (contentLower.includes(keyword)) {
-        score += 1; // Substring match bonus
+        score += 1;
       }
     });
 
     return { item, score };
   });
 
-  // 4. Sort by score desc, filter out items with 0 score (if we have matches), and take top-K
   const filtered = scoredItems.filter((x) => x.score > 0);
   const targetList = filtered.length > 0 ? filtered : scoredItems;
 
@@ -82,3 +135,4 @@ export async function retrieveFeedback(
     .slice(0, limit)
     .map((x) => x.item);
 }
+

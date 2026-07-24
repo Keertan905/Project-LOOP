@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { Sentiment, FeedbackStatus } from "@prisma/client";
+import { getEmbedding } from "@/lib/embeddings";
 
 // Individual row validation schema
 const feedbackRowSchema = z.object({
@@ -57,14 +58,13 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        // Create mock embedding
-        const mockVector = Array.from({ length: 10 }, (_, i) => +(Math.sin(index + i) * 0.1).toFixed(4));
-        await prisma.embedding.create({
-          data: {
-            feedbackId: feedback.id,
-            vector: mockVector,
-          },
-        });
+        // Create embedding
+        const vector = await getEmbedding(feedback.content);
+        const vectorString = `[${vector.join(",")}]`;
+        await prisma.$executeRaw`
+          INSERT INTO "Embedding" ("id", "feedbackId", "vector")
+          VALUES (${`emb_${feedback.id}`}, ${feedback.id}, ${vectorString}::vector)
+        `;
 
         importedCount++;
       } catch (err: unknown) {

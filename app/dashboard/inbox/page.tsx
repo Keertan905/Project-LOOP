@@ -125,16 +125,17 @@ export default async function InboxPage({ searchParams }: PageProps) {
     <main className="p-8 space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">
+        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
           Feedback Inbox
         </h1>
-        <p className="text-slate-400 text-sm">
+        <p className="text-text-secondary text-sm">
           Browse, filter, and triage customer feedback items.
         </p>
       </div>
 
       {/* Interactive List */}
       <FeedbackInboxList
+        key={`${page}-${limit}-${search}-${channel}-${sentiment}-${status}-${themeId}-${priority}`}
         initialItems={serializedItems}
         pagination={{
           total,

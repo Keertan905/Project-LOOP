@@ -19,6 +19,32 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [themeMode, setThemeMode] = useState<"system" | "light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("theme") as "system" | "light" | "dark") || "system";
+    }
+    return "system";
+  });
+
+  const handleThemeChange = (mode: "system" | "light" | "dark") => {
+    setThemeMode(mode);
+    if (mode === "system") {
+      localStorage.removeItem("theme");
+      const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (systemPrefersDark) {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    } else if (mode === "dark") {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+    toast.success(`Theme preference updated to ${mode === "system" ? "System Default" : mode === "dark" ? "Dark Mode" : "Light Mode"}`);
+  };
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -28,8 +54,7 @@ export default function SettingsPage() {
 
     if (status === "authenticated") {
       if (session.user.role !== "ADMIN") {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setLoading(false);
+        setTimeout(() => setLoading(false), 0);
         return;
       }
 
@@ -69,7 +94,6 @@ export default function SettingsPage() {
         const updated = await res.json();
         setWorkspace(updated);
         setName(updated.name);
-        // Refresh router context to update layout/sidebar titles if needed
         router.refresh();
         return updated;
       }
@@ -103,91 +127,99 @@ export default function SettingsPage() {
     );
   }
 
-  if (session?.user.role !== "ADMIN") {
-    return (
-      <main className="p-8 flex flex-col items-center justify-center min-h-[80vh]">
-        <div className="max-w-md w-full bg-card-custom border border-card-border rounded-xl p-8 text-center space-y-4 shadow-sm">
-          <div className="mx-auto w-12 h-12 bg-status-neg/10 text-status-neg rounded-full flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.249-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-extrabold text-text-primary">Access Denied</h2>
-          <p className="text-sm text-text-secondary">
-            Workspace settings can only be managed by **Admin** users. Please contact your administrator if you need to rename the company workspace.
-          </p>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-lg font-bold text-sm transition-colors cursor-pointer"
-          >
-            Go to Dashboard Overview
-          </button>
-        </div>
-      </main>
-    );
-  }
+  const isAdmin = session?.user.role === "ADMIN";
 
   return (
     <main className="p-8 space-y-6 max-w-4xl">
       {/* Page Header */}
       <div className="flex flex-col gap-1.5">
         <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
-          Workspace Settings
+          Settings & Preferences
         </h1>
         <p className="text-text-secondary text-sm">
-          Manage your organization name and general configuration options.
+          Manage your interface theme and organizational workspace details.
         </p>
       </div>
 
+      {/* App Theme Preferences Card */}
       <div className="bg-card-custom border border-card-border rounded-xl p-6 shadow-sm space-y-6">
         <div>
-          <h2 className="text-lg font-bold text-text-primary">Workspace Profile</h2>
+          <h2 className="text-lg font-bold text-text-primary">App Theme Preferences</h2>
           <p className="text-xs text-text-muted mt-0.5">
-            This name will be displayed globally across the sidebar and header layouts.
+            Choose whether LOOP should render in light mode, dark mode, or follow your operating system preferences automatically.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
+        <div className="max-w-lg">
+          <label className="block mb-1.5 text-xs text-text-secondary font-bold uppercase tracking-wider">
+            Active Theme Mode
+          </label>
+          <select
+            value={themeMode}
+            onChange={(e) => handleThemeChange(e.target.value as "system" | "light" | "dark")}
+            className="w-full bg-background border border-card-border rounded-lg px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all font-semibold cursor-pointer"
+          >
+            <option value="system">💻 System Default</option>
+            <option value="light">☀️ Light Mode</option>
+            <option value="dark">🌙 Dark Mode</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Workspace Profile Settings Card (ADMIN ONLY) */}
+      {isAdmin && (
+        <div className="bg-card-custom border border-card-border rounded-xl p-6 shadow-sm space-y-6">
           <div>
-            <label className="block mb-1.5 text-xs text-text-secondary font-bold uppercase tracking-wider">
-              Workspace Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Acme Corp"
-              className="w-full bg-background border border-card-border rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-            />
+            <h2 className="text-lg font-bold text-text-primary">Workspace Profile</h2>
+            <p className="text-xs text-text-muted mt-0.5">
+              This name will be displayed globally across the sidebar and header layouts.
+            </p>
           </div>
 
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="bg-primary hover:bg-primary-hover text-white font-bold text-sm px-6 py-2.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 shadow-sm"
-            >
-              {saving ? "Saving Changes..." : "Save Workspace Profile"}
-            </button>
-          </div>
-        </form>
-      </div>
+          <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
+            <div>
+              <label className="block mb-1.5 text-xs text-text-secondary font-bold uppercase tracking-wider">
+                Workspace Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Acme Corp"
+                className="w-full bg-background border border-card-border rounded-lg px-4 py-2 text-sm text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+            </div>
 
-      {/* Info Card */}
-      <div className="bg-card-custom/50 border border-card-border rounded-xl p-6 text-xs text-text-muted flex items-start gap-3">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-text-secondary shrink-0 mt-0.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.083.984l-.04.018-1.083-.984zm.682 3.085a.75.75 0 11-1.06 1.06l-1.06-1.06a.75.75 0 111.06-1.06l1.06 1.06zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <div className="space-y-1">
-          <p className="font-semibold text-text-secondary">Workspace Metadata</p>
-          <p>
-            **Workspace ID:** `{workspace?.id}`
-          </p>
-          <p>
-            **Registered on:** {workspace ? new Date(workspace.createdAt).toLocaleDateString(undefined, { dateStyle: "long" }) : "N/A"}
-          </p>
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className="bg-primary hover:bg-primary-hover text-white font-bold text-sm px-6 py-2.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 shadow-sm"
+              >
+                {saving ? "Saving Changes..." : "Save Workspace Profile"}
+              </button>
+            </div>
+          </form>
         </div>
-      </div>
+      )}
+
+      {/* Info Card (Visible to ADMIN) */}
+      {isAdmin && (
+        <div className="bg-card-custom/50 border border-card-border rounded-xl p-6 text-xs text-text-muted flex items-start gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-text-secondary shrink-0 mt-0.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.083.984l-.04.018-1.083-.984zm.682 3.085a.75.75 0 11-1.06 1.06l-1.06-1.06a.75.75 0 111.06-1.06l1.06 1.06zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div className="space-y-1">
+            <p className="font-semibold text-text-secondary">Workspace Metadata</p>
+            <p>
+              **Workspace ID:** `{workspace?.id}`
+            </p>
+            <p>
+              **Registered on:** {workspace ? new Date(workspace.createdAt).toLocaleDateString(undefined, { dateStyle: "long" }) : "N/A"}
+            </p>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

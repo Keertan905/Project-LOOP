@@ -1,5 +1,6 @@
 import { PrismaClient, Role, Sentiment, FeedbackStatus } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { getDeterministicMockVector } from "../lib/embeddings";
 
 const prisma = new PrismaClient();
 
@@ -304,16 +305,12 @@ async function main() {
       },
     });
 
-    // Create a mock embedding vector (1536 dimensions, all floats)
-    // We populate with a simple mock array of numbers (e.g. 1536 floats) so the DB has realistic size
-    // To save DB size during seed, we can make it a smaller size or just 10 floats, but let's do 10 floats for mock purposes.
-    const mockVector = Array.from({ length: 10 }, (_, idx) => +(Math.sin(i + idx) * 0.1).toFixed(4));
-    await prisma.embedding.create({
-      data: {
-        feedbackId: feedback.id,
-        vector: mockVector,
-      },
-    });
+    const vector = getDeterministicMockVector(feedback.content);
+    const vectorString = `[${vector.join(",")}]`;
+    await prisma.$executeRaw`
+      INSERT INTO "Embedding" ("id", "feedbackId", "vector")
+      VALUES (${`emb_${feedback.id}`}, ${feedback.id}, ${vectorString}::vector)
+    `;
 
     count++;
   }

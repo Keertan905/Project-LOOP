@@ -29,13 +29,13 @@ export default function SidebarNav({ links }: SidebarNavProps) {
           <Link
             key={link.href}
             href={link.href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
               isActive
-                ? "bg-primary/10 text-primary border-l-4 border-primary rounded-l-none pl-2"
-                : "text-sidebar-text-muted hover:text-sidebar-text hover:bg-sidebar-border/30"
+                ? "bg-primary text-white shadow-sm shadow-primary/25 font-semibold"
+                : "text-text-muted hover:text-text-primary hover:bg-slate-100"
             }`}
           >
-            <span className={isActive ? "text-primary" : "text-sidebar-text-muted"}>
+            <span className={`transition-colors ${isActive ? "text-white" : "text-text-muted group-hover:text-text-primary"}`}>
               {link.icon}
             </span>
             {link.label}

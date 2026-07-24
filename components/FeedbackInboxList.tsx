@@ -69,6 +69,8 @@ export default function FeedbackInboxList({
 
   const isReadOnly = currentRole === "VIEWER";
 
+
+
   const handleApplyFilters = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", "1"); // Reset to page 1 on filter changes
@@ -228,41 +230,41 @@ export default function FeedbackInboxList({
   const getSentimentBadge = (sent: Sentiment) => {
     switch (sent) {
       case "POS":
-        return <span className="bg-status-pos/10 text-status-pos border border-status-pos/20 px-2 py-0.5 rounded text-[10px] font-bold">POS</span>;
+        return <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2 py-0.5 rounded text-[10px] font-bold">POS</span>;
       case "NEG":
-        return <span className="bg-status-neg/10 text-status-neg border border-status-neg/20 px-2 py-0.5 rounded text-[10px] font-bold">NEG</span>;
+        return <span className="bg-rose-50 text-rose-700 border border-rose-200/60 px-2 py-0.5 rounded text-[10px] font-bold">NEG</span>;
       default:
-        return <span className="bg-status-neu/10 text-status-neu border border-status-neu/20 px-2 py-0.5 rounded text-[10px] font-bold">NEU</span>;
+        return <span className="bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-0.5 rounded text-[10px] font-bold">NEU</span>;
     }
   };
 
   const getStatusBadgeColor = (stat: FeedbackStatus) => {
     switch (stat) {
       case "NEW":
-        return "bg-status-neu/10 text-status-neu border border-status-neu/20";
+        return "bg-blue-50 text-blue-700 border border-blue-200/60";
       case "REVIEWED":
-        return "bg-status-info/10 text-status-info border border-status-info/20";
+        return "bg-purple-50 text-purple-700 border border-purple-200/60";
       case "ACTIONED":
-        return "bg-status-pos/10 text-status-pos border border-status-pos/20";
+        return "bg-emerald-50 text-emerald-700 border border-emerald-200/60";
       default:
-        return "bg-slate-500/10 text-text-secondary border border-slate-500/20";
+        return "bg-slate-50 text-slate-700 border border-slate-200/60";
     }
   };
 
   const getThemeBadgeColor = (colorName: string | null) => {
     switch (colorName) {
       case "indigo":
-        return "bg-primary/10 text-primary border border-primary/20";
+        return "bg-indigo-50 text-indigo-700 border border-indigo-200/60";
       case "purple":
-        return "bg-ai-accent/10 text-ai-accent border border-ai-accent/20";
+        return "bg-purple-50 text-purple-700 border border-purple-200/60";
       case "emerald":
-        return "bg-status-pos/10 text-status-pos border border-status-pos/20";
+        return "bg-emerald-50 text-emerald-700 border border-emerald-200/60";
       case "red":
-        return "bg-status-neg/10 text-status-neg border border-status-neg/20";
+        return "bg-rose-50 text-rose-700 border border-rose-200/60";
       case "orange":
-        return "bg-status-neu/10 text-status-neu border border-status-neu/20";
+        return "bg-amber-50 text-amber-700 border border-amber-200/60";
       default:
-        return "bg-slate-500/10 text-text-secondary border border-slate-500/20";
+        return "bg-slate-50 text-slate-700 border border-slate-200/60";
     }
   };
 
@@ -279,11 +281,11 @@ export default function FeedbackInboxList({
   const getPriorityBadge = (pri: Priority) => {
     switch (pri) {
       case "HIGH":
-        return <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded text-[10px] font-bold">HIGH</span>;
+        return <span className="bg-rose-50 text-rose-700 border border-rose-200/60 px-2 py-0.5 rounded text-[10px] font-bold">HIGH</span>;
       case "MEDIUM":
-        return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-bold">MEDIUM</span>;
+        return <span className="bg-amber-50 text-amber-700 border border-amber-200/60 px-2 py-0.5 rounded text-[10px] font-bold">MEDIUM</span>;
       default:
-        return <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded text-[10px] font-bold">LOW</span>;
+        return <span className="bg-slate-50 text-slate-700 border border-slate-200/60 px-2 py-0.5 rounded text-[10px] font-bold">LOW</span>;
     }
   };
 
@@ -544,7 +546,7 @@ export default function FeedbackInboxList({
                           className="text-text-muted hover:text-status-neg transition-colors p-1 cursor-pointer disabled:opacity-50"
                           title="Delete Feedback"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                           </svg>
                         </button>
