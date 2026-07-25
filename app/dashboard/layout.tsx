@@ -1,10 +1,9 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import LogoutButton from "@/components/LogoutButton";
-import SidebarNav from "@/components/SidebarNav";
 import { prisma } from "@/lib/prisma";
 import { hasPermission } from "@/lib/permissions";
+import DashboardShell from "@/components/DashboardShell";
 
 interface SidebarLink {
   href: string;
@@ -113,67 +112,15 @@ export default async function DashboardLayout({
     return hasPermission(session.user.role, link.permission);
   });
 
-  const getRoleBadgeStyles = (role: string) => {
-    switch (role) {
-      case "ADMIN":
-        return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-      case "ANALYST":
-        return "bg-primary/10 text-primary border border-primary/20";
-      default:
-        return "bg-slate-500/10 text-sidebar-text-muted border border-slate-500/20";
-    }
-  };
-
   return (
-    <div className="flex h-screen bg-background text-text-primary font-sans overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-sidebar-custom border-r border-sidebar-border flex flex-col justify-between shrink-0 print:hidden">
-        <div>
-          {/* Header */}
-          <div className="h-16 px-6 border-b border-sidebar-border flex items-center gap-3">
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-ai-accent bg-clip-text text-transparent">
-              🔁 LOOP
-            </span>
-            <div className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-sidebar-border/50 border border-sidebar-border text-sidebar-text-muted max-w-[120px] truncate">
-              {workspace?.name || "Workspace"}
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <SidebarNav links={filteredLinks} />
-        </div>
-
-        {/* Footer User Card */}
-        <div className="p-4 border-t border-sidebar-border space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center font-bold text-sm text-sidebar-text shrink-0">
-              {session.user.name ? session.user.name[0].toUpperCase() : "U"}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold truncate text-sidebar-text">
-                {session.user.name}
-              </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className={`text-[10px] font-bold tracking-wider px-1.5 py-0.2 rounded uppercase ${getRoleBadgeStyles(session.user.role)}`}>
-                  {session.user.role}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center gap-2 pt-2">
-            <span className="text-[11px] text-sidebar-text-muted truncate max-w-[130px]">
-              {session.user.email}
-            </span>
-            <LogoutButton />
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-background print:overflow-visible print:bg-white print:text-black">
-        {children}
-      </div>
-    </div>
+    <DashboardShell
+      workspaceName={workspace?.name || "Workspace"}
+      userName={session.user.name}
+      userRole={session.user.role}
+      userEmail={session.user.email}
+      filteredLinks={filteredLinks}
+    >
+      {children}
+    </DashboardShell>
   );
 }
