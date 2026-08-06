@@ -130,10 +130,10 @@ export default async function TrendsPage() {
     <main className="p-8 space-y-6">
       {/* Page Header */}
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
           Theme Trends
         </h1>
-        <p className="text-slate-400 text-sm">
+        <p className="text-slate-600 text-sm font-medium">
           Monitor growing topics, spikes, and drill down into clustered feedback.
         </p>
       </div>

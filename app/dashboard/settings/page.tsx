@@ -133,10 +133,10 @@ export default function SettingsPage() {
     <main className="p-8 space-y-6 max-w-4xl">
       {/* Page Header */}
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
           Settings & Preferences
         </h1>
-        <p className="text-text-secondary text-sm">
+        <p className="text-slate-600 text-sm font-medium">
           Manage your interface theme and organizational workspace details.
         </p>
       </div>

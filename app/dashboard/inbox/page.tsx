@@ -125,10 +125,10 @@ export default async function InboxPage({ searchParams }: PageProps) {
     <main className="p-8 space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
           Feedback Inbox
         </h1>
-        <p className="text-text-secondary text-sm">
+        <p className="text-slate-600 text-sm font-medium">
           Browse, filter, and triage customer feedback items.
         </p>
       </div>

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  /* Light Main Page + Dark Sidebar Palette */
+  /* Unified Palette: Dark Sidebar + Clean Light Main Page */
   --background: #f8fafc;
   --foreground: #0f172a;
   
@@ -23,62 +23,8 @@
   --status-info: #2563eb;
 
   --text-primary: #0f172a;
-  --text-secondary: #334155;
+  --text-secondary: #475569;
   --text-muted: #64748b;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b1120;
-    --foreground: #f8fafc;
-    
-    --card: #1e293b;
-    --card-border: #334155;
-    
-    --sidebar: #111827;
-    --sidebar-border: #1f2937;
-    --sidebar-text: #f8fafc;
-    --sidebar-text-muted: #94a3b8;
-    
-    --primary: #6366f1;
-    --primary-hover: #4f46e5;
-    --ai-accent: #a855f7;
-    
-    --status-pos: #22c55e;
-    --status-neg: #ef4444;
-    --status-neu: #f59e0b;
-    --status-info: #3b82f6;
-
-    --text-primary: #f8fafc;
-    --text-secondary: #cbd5e1;
-    --text-muted: #94a3b8;
-  }
-}
-
-.dark {
-  --background: #0b1120;
-  --foreground: #f8fafc;
-  
-  --card: #1e293b;
-  --card-border: #334155;
-  
-  --sidebar: #111827;
-  --sidebar-border: #1f2937;
-  --sidebar-text: #f8fafc;
-  --sidebar-text-muted: #94a3b8;
-  
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --ai-accent: #a855f7;
-  
-  --status-pos: #22c55e;
-  --status-neg: #ef4444;
-  --status-neu: #f59e0b;
-  --status-info: #3b82f6;
-
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
 }
 
 @theme {
@@ -111,5 +57,4 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
 }

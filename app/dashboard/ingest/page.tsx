@@ -20,10 +20,10 @@ export default async function IngestPage() {
     <main className="p-8 space-y-6">
       {/* Page Header */}
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-extrabold tracking-tight text-text-primary">
+        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
           Ingest Feedback
         </h1>
-        <p className="text-text-secondary text-sm">
+        <p className="text-slate-600 text-sm font-medium">
           Import new customer reviews, NPS comments, or support tickets.
         </p>
       </div>
