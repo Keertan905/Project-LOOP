@@ -1,30 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  /* Light Mode Palette - Premium Enterprise SaaS */
-  --background: #f7f9fc;
-  --foreground: #111827;
+  /* Light Main Page + Dark Sidebar Palette */
+  --background: #f8fafc;
+  --foreground: #0f172a;
   
   --card: #ffffff;
-  --card-border: #e5e7eb;
+  --card-border: #e2e8f0;
   
-  --sidebar: #ffffff;
-  --sidebar-border: #e5e7eb;
-  --sidebar-text: #111827;
-  --sidebar-text-muted: #6b7280;
+  --sidebar: #020617;
+  --sidebar-border: #1e293b;
+  --sidebar-text: #f8fafc;
+  --sidebar-text-muted: #94a3b8;
   
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --ai-accent: #7c3aed;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --ai-accent: #9333ea;
   
-  --status-pos: #22c55e;
-  --status-neg: #ef4444;
-  --status-neu: #f59e0b;
-  --status-info: #3b82f6;
+  --status-pos: #16a34a;
+  --status-neg: #dc2626;
+  --status-neu: #d97706;
+  --status-info: #2563eb;
 
-  --text-primary: #111827;
-  --text-secondary: #374151;
-  --text-muted: #6b7280;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
 }
 
 @media (prefers-color-scheme: dark) {

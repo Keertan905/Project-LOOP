@@ -1,5 +1,7 @@
 import { prisma } from "./prisma";
 import { getEmbedding } from "./embeddings";
+import { logger } from "./logger";
+import { memoryCache } from "./cache";
 
 // Basic stop words to ignore when performing search ranking
 const STOP_WORDS = new Set([
@@ -83,8 +85,9 @@ export async function retrieveFeedback(
       }));
     }
   } catch (err) {
-    console.error("Vector similarity search failed, falling back to keyword search:", err);
+    logger.warn("Vector similarity search failed, falling back to keyword search", { query, workspaceId, error: err });
   }
+
 
   // 3. Fallback Keyword Search
   const keywords = query

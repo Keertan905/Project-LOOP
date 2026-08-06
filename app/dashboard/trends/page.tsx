@@ -13,12 +13,32 @@ export default async function TrendsPage() {
 
   const workspaceId = session.user.workspaceId;
 
-  // Fetch all themes with their related feedback items
+  const now = new Date();
+  const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  // Fetch all themes with 30-day feedback items and overall counts
   const themes = await prisma.theme.findMany({
     where: { workspaceId },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      color: true,
+      _count: {
+        select: {
+          feedbackThemes: true,
+        },
+      },
       feedbackThemes: {
-        include: {
+        where: {
+          feedback: {
+            createdAt: {
+              gte: thirtyDaysAgo,
+            },
+          },
+        },
+        select: {
           feedback: {
             select: {
               id: true,
@@ -39,10 +59,6 @@ export default async function TrendsPage() {
       },
     },
   });
-
-  const now = new Date();
-  const fifteenDaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   // Process data for the client component
   const processedThemes = themes.map((theme) => {
@@ -93,7 +109,7 @@ export default async function TrendsPage() {
       name: theme.name,
       description: theme.description,
       color: theme.color,
-      totalCount: feedbacks.length,
+      totalCount: theme._count.feedbackThemes,
       currentPeriodCount,
       previousPeriodCount,
       spikeRate,

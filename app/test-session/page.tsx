@@ -1,17 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useSession } from "next-auth/react";
-
-
-export default function TestSession(){
-
- const {data:session}=useSession();
-
-
- return(
-  <pre>
-   {JSON.stringify(session,null,2)}
-  </pre>
- );
-
+export default function TestSessionPage() {
+  redirect("/dashboard");
 }

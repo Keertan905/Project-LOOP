@@ -19,15 +19,18 @@ export default function MembersPage() {
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Invite form states
+
+  // Form states
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>(Role.VIEWER);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+
+  // Invite Modal states
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState("");
+  const [copied, setCopied] = useState(false);
 
   // Action loading states
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -39,7 +42,6 @@ export default function MembersPage() {
         const data = await res.json();
         setMembers(data);
       } else if (res.status === 403) {
-        // Redirect if forbidden
         router.push("/403");
       }
     } catch (_err) {
@@ -56,50 +58,51 @@ export default function MembersPage() {
       if (session.user.role !== "ADMIN") {
         router.push("/403");
       } else {
-        const timer = setTimeout(() => {
-          fetchMembers();
-        }, 0);
-        return () => clearTimeout(timer);
+        fetchMembers();
       }
     }
   }, [status, session, router, fetchMembers]);
 
-  const handleInvite = async (e: React.FormEvent) => {
+  const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setSubmitting(true);
 
     try {
-      const res = await fetch("/api/users", {
+      const res = await fetch("/api/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({ name, email, role }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        setSuccess(`Successfully added ${name}!`);
+        setInviteUrl(data.inviteUrl);
+        setShowInviteModal(true);
         setName("");
         setEmail("");
-        setPassword("");
         setRole(Role.VIEWER);
-        // Refresh list
-        fetchMembers();
       } else {
-        setError(data.error || "Failed to add user");
+        setError(data.error || "Failed to create invitation");
       }
     } catch {
-      setError("Network error adding user");
+      setError("Network error creating invitation");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleCopyLink = () => {
+    if (inviteUrl) {
+      navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const handleRoleChange = async (userId: string, newRole: Role) => {
     setError("");
-    setSuccess("");
     setUpdatingId(userId);
 
     try {
@@ -109,14 +112,12 @@ export default function MembersPage() {
         body: JSON.stringify({ userId, role: newRole }),
       });
 
-      const data = await res.json();
-
       if (res.ok) {
         setMembers((prev) =>
           prev.map((m) => (m.id === userId ? { ...m, role: newRole } : m))
         );
-        setSuccess("User role updated successfully!");
       } else {
+        const data = await res.json();
         setError(data.error || "Failed to update role");
       }
     } catch {
@@ -126,112 +127,139 @@ export default function MembersPage() {
     }
   };
 
-  const handleRemove = async (userId: string, memberName: string) => {
-    if (!confirm(`Are you sure you want to remove ${memberName} from this workspace?`)) {
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-    setUpdatingId(userId);
-
-    try {
-      const res = await fetch(`/api/users?userId=${userId}`, {
-        method: "DELETE",
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setMembers((prev) => prev.filter((m) => m.id !== userId));
-        setSuccess(`Successfully removed ${memberName} from workspace.`);
-      } else {
-        setError(data.error || "Failed to remove user");
-      }
-    } catch {
-      setError("Network error removing user");
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
   if (loading || status === "loading") {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-slate-400">
         <div className="flex flex-col items-center gap-3">
-          <span className="animate-spin h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent"></span>
-          <p className="text-sm font-semibold">Loading team members...</p>
+          <span className="animate-spin h-8 w-8 rounded-full border-2 border-indigo-600 border-t-transparent"></span>
+          <p className="text-sm font-semibold">Loading Team Directory...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <main className="p-8 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-3xl font-extrabold tracking-tight text-white">
-          Team Management
-        </h1>
-        <p className="text-slate-400 text-sm">
-          Invite teammates, configure roles, and manage workspace permissions.
-        </p>
+    <main className="p-8 space-y-6 relative">
+      {/* Top Banner Header */}
+      <div className="space-y-1 border-b border-slate-200 pb-4">
+        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Team & Access Management</h1>
+        <p className="text-xs text-slate-500 font-medium">Configure teammate roles and workspace accessibility permissions.</p>
       </div>
 
-      {/* Message banners */}
       {error && (
-        <div className="p-4 rounded-lg bg-red-950/40 border border-red-500/20 text-red-400 text-sm">
+        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
           ⚠️ {error}
         </div>
       )}
-      {success && (
-        <div className="p-4 rounded-lg bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 text-sm">
-          ✅ {success}
-        </div>
-      )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
-        {/* Left/Middle: Users List */}
-        <div className="xl:col-span-2 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-md">
-          <div className="p-5 border-b border-slate-800">
-            <h3 className="text-lg font-bold text-slate-200">Active Workspace Members</h3>
-            <p className="text-xs text-slate-500">Users who currently have access to this workspace</p>
+      {/* Main Grid: Left Invite Form + Right Workspace Member List */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* Left Card: INVITE TEAM MEMBER */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+            Invite Team Member
           </div>
-          
+
+          <form onSubmit={handleSendInvite} className="space-y-4">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Teammate Full Name</label>
+              <input
+                type="text"
+                required
+                placeholder="ansh"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Email Address (Gmail)</label>
+              <input
+                type="email"
+                required
+                placeholder="jain45@gmail.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Assign Access Role</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as Role)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white cursor-pointer font-medium"
+              >
+                <option value="VIEWER">VIEWER (Read-only)</option>
+                <option value="ANALYST">ANALYST (Triage & Analytics)</option>
+                <option value="ADMIN">ADMIN (Full Access)</option>
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              <span>+ Send Workspace Invite</span>
+            </button>
+          </form>
+        </div>
+
+        {/* Right Table: WORKSPACE MEMBER LIST */}
+        <div className="lg:col-span-2 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              Workspace Member List
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-950 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="py-4 px-6">User</th>
-                  <th className="py-4 px-6">Email Address</th>
-                  <th className="py-4 px-6">Role</th>
-                  <th className="py-4 px-6 text-right">Actions</th>
+                <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4">Member</th>
+                  <th className="py-3 px-4">Role</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Joined</th>
+                  <th className="py-3 px-4">Last Active</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/50 text-sm">
+              <tbody className="divide-y divide-slate-100 text-xs">
                 {members.map((member) => {
                   const isSelf = member.id === session?.user.id;
                   return (
-                    <tr key={member.id} className="hover:bg-slate-800/10 transition-colors">
-                      <td className="py-4 px-6">
+                    <tr key={member.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300">
-                            {member.name[0].toUpperCase()}
+                          <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center">
+                            {member.name ? member.name.slice(0, 2).toUpperCase() : "CH"}
                           </div>
                           <div>
-                            <p className="font-semibold text-slate-200">
-                              {member.name} {isSelf && <span className="text-[10px] bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.2 rounded ml-1.5 font-bold uppercase">You</span>}
+                            <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                              {member.name}
+                              {isSelf && (
+                                <span className="text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.2 rounded">
+                                  You
+                                </span>
+                              )}
                             </p>
-                            <p className="text-[11px] text-slate-500">
-                              Added {new Date(member.createdAt).toLocaleDateString()}
-                            </p>
+                            <p className="text-[10px] text-slate-400">{member.email}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="py-4 px-6 text-slate-400">{member.email}</td>
-                      <td className="py-4 px-6">
+                      <td className="py-3.5 px-4">
                         {isSelf ? (
-                          <span className="inline-block text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase">
+                          <span className="text-[10px] font-bold text-indigo-600 uppercase">
                             {member.role}
                           </span>
                         ) : (
@@ -239,22 +267,28 @@ export default function MembersPage() {
                             disabled={updatingId === member.id}
                             value={member.role}
                             onChange={(e) => handleRoleChange(member.id, e.target.value as Role)}
-                            className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-bold uppercase cursor-pointer disabled:opacity-50"
+                            className="bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-bold text-slate-700 uppercase cursor-pointer"
                           >
-                            <option value="ADMIN">Admin</option>
-                            <option value="ANALYST">Analyst</option>
-                            <option value="VIEWER">Viewer</option>
+                            <option value="ADMIN">ADMIN</option>
+                            <option value="ANALYST">ANALYST</option>
+                            <option value="VIEWER">VIEWER</option>
                           </select>
                         )}
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Active
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-600 text-[11px]">
+                        {new Date(member.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-400 text-[11px]">Just now</td>
+                      <td className="py-3.5 px-4 text-right">
                         {!isSelf && (
-                          <button
-                            disabled={updatingId === member.id}
-                            onClick={() => handleRemove(member.id, member.name)}
-                            className="text-xs text-red-500 hover:text-red-400 hover:underline font-semibold disabled:opacity-50"
-                          >
-                            Remove
+                          <button className="text-[11px] text-slate-400 hover:text-red-600 transition-colors font-semibold cursor-pointer">
+                            Revoke
                           </button>
                         )}
                       </td>
@@ -265,74 +299,59 @@ export default function MembersPage() {
             </table>
           </div>
         </div>
+      </div>
 
-        {/* Right: Invite Form */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md space-y-5">
-          <div>
-            <h3 className="text-lg font-bold text-slate-200">Add Team Member</h3>
-            <p className="text-xs text-slate-500">Create a user directly linked to this workspace</p>
-          </div>
+      {/* Workspace Invitation Created Modal Overlay */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-scale-in relative">
+            <button
+              onClick={() => setShowInviteModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer text-sm"
+            >
+              ✕
+            </button>
 
-          <form onSubmit={handleInvite} className="space-y-4">
-            <div>
-              <label className="block mb-1 text-xs text-slate-400 font-semibold uppercase tracking-wider">Full Name</label>
+            <div className="text-center space-y-2">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-lg font-bold">
+                ✓
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Workspace Invitation Created</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Development Mode is enabled. Email delivery is disabled.<br />
+                Share the secure invitation link below manually.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Secure URL</label>
               <input
                 type="text"
-                required
-                placeholder="e.g. John Doe"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500"
+                readOnly
+                value={inviteUrl}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-indigo-600 font-mono focus:outline-none"
               />
             </div>
 
-            <div>
-              <label className="block mb-1 text-xs text-slate-400 font-semibold uppercase tracking-wider">Email Address</label>
-              <input
-                type="email"
-                required
-                placeholder="e.g. john@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 text-xs text-slate-400 font-semibold uppercase tracking-wider">Temporary Password</label>
-              <input
-                type="password"
-                required
-                placeholder="Minimum 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 text-xs text-slate-400 font-semibold uppercase tracking-wider">Workspace Role</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as Role)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 uppercase font-semibold"
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={handleCopyLink}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 rounded-xl border border-slate-200 transition-all cursor-pointer text-center"
               >
-                <option value="VIEWER">Viewer (Read-only)</option>
-                <option value="ANALYST">Analyst (Triage & Reports)</option>
-                <option value="ADMIN">Admin (Full Access)</option>
-              </select>
+                {copied ? "Copied! ✓" : "Copy Invitation Link"}
+              </button>
+              <a
+                href={inviteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs py-2.5 rounded-xl transition-all cursor-pointer text-center flex items-center justify-center gap-1 shadow-xs"
+              >
+                <span>↗ Open Invitation</span>
+              </a>
             </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm py-2.5 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {submitting ? "Adding Member..." : "Add Member"}
-            </button>
-          </form>
+          </div>
         </div>
-      </div>
+      )}
     </main>
   );
 }
