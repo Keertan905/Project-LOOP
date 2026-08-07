@@ -20,12 +20,17 @@ export default function MembersPage() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Add Mode state: "DIRECT" (instant user creation) vs "INVITE" (token link)
+  const [addMode, setAddMode] = useState<"DIRECT" | "INVITE">("DIRECT");
+
   // Form states
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>(Role.VIEWER);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   // Invite Modal states
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -63,9 +68,44 @@ export default function MembersPage() {
     }
   }, [status, session, router, fetchMembers]);
 
+  // Handle Direct Add Member (Admin directly creates User in DB)
+  const handleDirectAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    setSubmitting(true);
+
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, role }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setSuccessMsg(`Member ${name} (${email}) created successfully!`);
+        setName("");
+        setEmail("");
+        setPassword("");
+        setRole(Role.VIEWER);
+        fetchMembers();
+      } else {
+        setError(data.error || "Failed to create user");
+      }
+    } catch {
+      setError("Network error creating user");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle Send Invite Link
   const handleSendInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccessMsg("");
     setSubmitting(true);
 
     try {
@@ -103,6 +143,7 @@ export default function MembersPage() {
 
   const handleRoleChange = async (userId: string, newRole: Role) => {
     setError("");
+    setSuccessMsg("");
     setUpdatingId(userId);
 
     try {
@@ -116,12 +157,42 @@ export default function MembersPage() {
         setMembers((prev) =>
           prev.map((m) => (m.id === userId ? { ...m, role: newRole } : m))
         );
+        setSuccessMsg("Role updated successfully");
       } else {
         const data = await res.json();
         setError(data.error || "Failed to update role");
       }
     } catch {
       setError("Network error updating role");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  // Handle Revoke / Delete Member
+  const handleRevokeUser = async (userId: string, memberName: string) => {
+    if (!window.confirm(`Are you sure you want to revoke access for ${memberName}?`)) {
+      return;
+    }
+
+    setError("");
+    setSuccessMsg("");
+    setUpdatingId(userId);
+
+    try {
+      const res = await fetch(`/api/users?userId=${userId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setMembers((prev) => prev.filter((m) => m.id !== userId));
+        setSuccessMsg(`Access for ${memberName} has been revoked.`);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Failed to revoke member access");
+      }
+    } catch {
+      setError("Network error revoking member access");
     } finally {
       setUpdatingId(null);
     }
@@ -147,29 +218,71 @@ export default function MembersPage() {
       </div>
 
       {error && (
-        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
           ⚠️ {error}
         </div>
       )}
 
-      {/* Main Grid: Left Invite Form + Right Workspace Member List */}
+      {successMsg && (
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
+          ✓ {successMsg}
+        </div>
+      )}
+
+      {/* Main Grid: Left Add/Invite Form + Right Workspace Member List */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left Card: INVITE TEAM MEMBER */}
+        
+        {/* Left Card: ADD / INVITE TEAM MEMBER */}
         <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs space-y-4">
+          
+          {/* Mode Selector Tabs */}
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => {
+                setAddMode("DIRECT");
+                setError("");
+                setSuccessMsg("");
+              }}
+              className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                addMode === "DIRECT"
+                  ? "bg-white text-indigo-600 shadow-xs"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Direct Add
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAddMode("INVITE");
+                setError("");
+                setSuccessMsg("");
+              }}
+              className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                addMode === "INVITE"
+                  ? "bg-white text-indigo-600 shadow-xs"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Invite Link
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
             <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
-            Invite Team Member
+            {addMode === "DIRECT" ? "Add New Member" : "Invite Team Member"}
           </div>
 
-          <form onSubmit={handleSendInvite} className="space-y-4">
+          <form onSubmit={addMode === "DIRECT" ? handleDirectAdd : handleSendInvite} className="space-y-4">
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Teammate Full Name</label>
               <input
                 type="text"
                 required
-                placeholder="ansh"
+                placeholder="Ansh Jain"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
@@ -177,16 +290,30 @@ export default function MembersPage() {
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Email Address (Gmail)</label>
+              <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Email Address</label>
               <input
                 type="email"
                 required
-                placeholder="jain45@gmail.com"
+                placeholder="ansh@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
               />
             </div>
+
+            {addMode === "DIRECT" && (
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Initial Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Min. 8 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Assign Access Role</label>
@@ -206,7 +333,7 @@ export default function MembersPage() {
               disabled={submitting}
               className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs py-2.5 rounded-xl shadow-md shadow-indigo-500/20 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
-              <span>+ Send Workspace Invite</span>
+              <span>{addMode === "DIRECT" ? "+ Add Member Now" : "+ Send Workspace Invite"}</span>
             </button>
           </form>
         </div>
@@ -218,7 +345,7 @@ export default function MembersPage() {
               <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
-              Workspace Member List
+              Workspace Member List ({members.length})
             </div>
           </div>
 
@@ -230,7 +357,6 @@ export default function MembersPage() {
                   <th className="py-3 px-4">Role</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Joined</th>
-                  <th className="py-3 px-4">Last Active</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -284,11 +410,14 @@ export default function MembersPage() {
                       <td className="py-3.5 px-4 text-slate-600 text-[11px]">
                         {new Date(member.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </td>
-                      <td className="py-3.5 px-4 text-slate-400 text-[11px]">Just now</td>
                       <td className="py-3.5 px-4 text-right">
                         {!isSelf && (
-                          <button className="text-[11px] text-slate-400 hover:text-red-600 transition-colors font-semibold cursor-pointer">
-                            Revoke
+                          <button
+                            onClick={() => handleRevokeUser(member.id, member.name)}
+                            disabled={updatingId === member.id}
+                            className="text-[11px] text-slate-400 hover:text-red-600 transition-colors font-semibold cursor-pointer disabled:opacity-50"
+                          >
+                            Revoke Access
                           </button>
                         )}
                       </td>
@@ -355,3 +484,4 @@ export default function MembersPage() {
     </main>
   );
 }
+
