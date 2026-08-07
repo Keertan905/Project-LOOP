@@ -3,6 +3,43 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
+import { Role } from "@prisma/client";
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const token = searchParams.get("token");
+
+    if (!token) {
+      return NextResponse.json({ error: "Token query parameter is required" }, { status: 400 });
+    }
+
+    const prismaAny = prisma as any;
+    const invite = await prismaAny.inviteToken?.findUnique?.({
+      where: { token },
+      include: { workspace: true },
+    });
+
+    if (!invite) {
+      return NextResponse.json({ error: "Invalid invitation token" }, { status: 404 });
+    }
+
+    if (new Date() > new Date(invite.expires)) {
+      return NextResponse.json({ error: "Invitation token has expired" }, { status: 410 });
+    }
+
+    return NextResponse.json({
+      valid: true,
+      email: invite.email,
+      name: invite.name,
+      role: invite.role,
+      workspaceName: invite.workspace?.name || "Loop Workspace",
+    });
+  } catch (error) {
+    console.error("Error verifying invite token:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -21,47 +58,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // Generate token
+    // Generate token and 7-day expiration
     const token = randomUUID();
-    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    const prismaAny = prisma as unknown as Record<string, { create: (args: unknown) => Promise<{ expires: Date }> }>;
+    const assignedRole = (role && Object.values(Role).includes(role as Role)) ? (role as Role) : Role.VIEWER;
 
-    let expiresAt = expires;
+    const prismaAny = prisma as any;
+    const invite = await prismaAny.inviteToken?.create?.({
+      data: {
+        email,
+        name: name || null,
+        role: assignedRole,
+        token,
+        expires,
+        workspaceId: session.user.workspaceId,
+      },
+    });
 
-    // Safely create InviteToken if table exists
-    if (prismaAny.inviteToken && typeof prismaAny.inviteToken.create === "function") {
-      try {
-        const invite = await prismaAny.inviteToken.create({
-          data: {
-            email,
-            name: name || null,
-            role: role || "VIEWER",
-            token,
-            expires,
-            workspaceId: session.user.workspaceId,
-          },
-        });
-        expiresAt = invite.expires || expires;
-      } catch (dbErr) {
-        console.warn("InviteToken DB model save fallback:", dbErr);
-      }
-    }
-
-    // Safely record ActivityLog if table exists
-    if (prismaAny.activityLog && typeof prismaAny.activityLog.create === "function") {
-      try {
+    // Record ActivityLog if present
+    try {
+      if (prismaAny.activityLog?.create) {
         await prismaAny.activityLog.create({
           data: {
             workspaceId: session.user.workspaceId,
             action: "INVITE_CREATED",
             actorName: session.user.name || "Admin",
-            details: `Created workspace invite for ${email} (${role || "VIEWER"})`,
+            details: `Created workspace invite for ${email} (${assignedRole})`,
           },
         });
-      } catch (logErr) {
-        console.warn("ActivityLog DB model save fallback:", logErr);
       }
+    } catch (logErr) {
+      console.warn("ActivityLog create fallback:", logErr);
     }
 
     const host = req.headers.get("host") || "localhost:3000";
@@ -70,12 +98,16 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      token,
+      token: invite?.token || token,
       inviteUrl,
-      expiresAt,
+      expiresAt: invite?.expires || expires,
     });
   } catch (error) {
     console.error("Error creating workspace invite:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+
+
+

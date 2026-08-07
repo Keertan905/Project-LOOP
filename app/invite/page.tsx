@@ -1,19 +1,56 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+
+interface InviteDetails {
+  email: string;
+  name?: string;
+  role: string;
+  workspaceName: string;
+}
 
 function InviteForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const router = useRouter();
 
+  const [inviteDetails, setInviteDetails] = useState<InviteDetails | null>(null);
+  const [loadingInvite, setLoadingInvite] = useState(true);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setError("Invalid or missing invitation token.");
+      setLoadingInvite(false);
+      return;
+    }
+
+    const verifyToken = async () => {
+      try {
+        const res = await fetch(`/api/invite?token=${token}`);
+        const data = await res.json();
+
+        if (res.ok && data.valid) {
+          setInviteDetails(data);
+          if (data.name) setName(data.name);
+        } else {
+          setError(data.error || "This invitation link is invalid or has expired.");
+        }
+      } catch {
+        setError("Error verifying invitation link.");
+      } finally {
+        setLoadingInvite(false);
+      }
+    };
+
+    verifyToken();
+  }, [token]);
 
   const handleAccept = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,10 +67,9 @@ function InviteForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name,
-          email: "invited_user@workspace.com",
-          password,
           inviteToken: token,
+          name,
+          password,
         }),
       });
 
@@ -53,6 +89,17 @@ function InviteForm() {
     }
   };
 
+  if (loadingInvite) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-slate-400">
+        <div className="flex flex-col items-center gap-3">
+          <span className="animate-spin h-8 w-8 rounded-full border-2 border-indigo-500 border-t-transparent"></span>
+          <p className="text-sm font-semibold">Verifying Invitation Token...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
@@ -61,7 +108,17 @@ function InviteForm() {
             🔁
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Workspace Invitation</h1>
-          <p className="text-slate-400 text-sm">You have been invited to join a Loop Workspace.</p>
+          <p className="text-slate-400 text-sm">
+            {inviteDetails
+              ? `You have been invited to join ${inviteDetails.workspaceName} as a ${inviteDetails.role}.`
+              : "You have been invited to join a Loop Workspace."}
+          </p>
+
+          {inviteDetails?.email && (
+            <div className="inline-block bg-slate-800 border border-slate-700 text-indigo-400 font-mono text-xs px-3 py-1 rounded-full mt-1">
+              {inviteDetails.email}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -94,17 +151,19 @@ function InviteForm() {
               <input
                 type="password"
                 required
-                placeholder="Minimum 8 characters"
+                minLength={6}
+                placeholder="Minimum 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
               />
             </div>
 
+
             <button
               type="submit"
-              disabled={submitting || !token}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-indigo-600/25 disabled:opacity-50"
+              disabled={submitting || !token || !!error}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg shadow-indigo-600/25 disabled:opacity-50 cursor-pointer"
             >
               {submitting ? "Joining Workspace..." : "Accept & Join Workspace"}
             </button>
@@ -128,3 +187,4 @@ export default function InvitePage() {
     </Suspense>
   );
 }
+
