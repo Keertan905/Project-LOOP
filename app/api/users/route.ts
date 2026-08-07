@@ -73,38 +73,53 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validatedData = createUserSchema.parse(body);
 
-    // Check if email already registered
+    // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: validatedData.email },
     });
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Email is already registered" },
-        { status: 409 }
-      );
-    }
-
     const hashedPassword = await hash(validatedData.password, 10);
 
-    const newUser = await prisma.user.create({
-      data: {
-        name: validatedData.name,
-        email: validatedData.email,
-        password: hashedPassword,
-        role: validatedData.role,
-        workspaceId: session.user.workspaceId,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-      },
-    });
+    let user;
+    if (existingUser) {
+      // Re-assign user to this workspace with new role and password
+      user = await prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          name: validatedData.name || existingUser.name,
+          password: hashedPassword,
+          role: validatedData.role,
+          workspaceId: session.user.workspaceId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+        },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: {
+          name: validatedData.name,
+          email: validatedData.email,
+          password: hashedPassword,
+          role: validatedData.role,
+          workspaceId: session.user.workspaceId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+        },
+      });
+    }
 
-    return NextResponse.json(newUser, { status: 201 });
+    return NextResponse.json(user, { status: 201 });
+
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Validation error", details: error.issues }, { status: 400 });
