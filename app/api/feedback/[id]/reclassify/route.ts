@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { classifyFeedbackText } from "@/lib/ai";
+import { logActivity } from "@/lib/activity";
 
 interface RouteParams {
   params: Promise<{
@@ -97,6 +98,13 @@ export async function POST(
         },
       });
     }
+
+    await logActivity(
+      "AI Reclassification",
+      session.user.name || session.user.email || "Unknown User",
+      `Reclassified feedback sentiment to ${classification.sentiment} and associated themes: ${classification.themes.join(", ")}`,
+      workspaceId
+    );
 
     // Return the updated feedback with its themes
     const finalFeedback = await prisma.feedback.findUnique({

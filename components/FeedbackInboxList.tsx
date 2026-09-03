@@ -126,6 +126,85 @@ export default function FeedbackInboxList({
     }
   };
 
+  // Bulk selection and clear all states
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
+
+  const isAllSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(items.map((item) => item.id));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (isReadOnly || selectedIds.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.length} marked feedback items?`)) return;
+
+    setIsBulkDeleting(true);
+
+    try {
+      const res = await fetch("/api/feedback/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message || `Deleted ${selectedIds.length} feedback items`);
+        setItems((prev) => prev.filter((item) => !selectedIds.includes(item.id)));
+        setSelectedIds([]);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to delete selected feedback");
+      }
+    } catch {
+      toast.error("Network error deleting selected feedback");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const handleClearAllInbox = async () => {
+    if (isReadOnly) return;
+    setIsPurging(true);
+
+    try {
+      const res = await fetch("/api/feedback/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message || "All inbox feedback has been cleared!");
+        setItems([]);
+        setSelectedIds([]);
+        setShowClearModal(false);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Failed to clear inbox history");
+      }
+    } catch {
+      toast.error("Network error clearing inbox history");
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   const handleDeleteFeedback = async (id: string) => {
     if (isReadOnly) return;
     if (!confirm("Are you sure you want to delete this feedback item?")) return;
@@ -140,6 +219,7 @@ export default function FeedbackInboxList({
       if (res.ok) {
         toast.success("Feedback deleted successfully");
         setItems((prev) => prev.filter((item) => item.id !== id));
+        setSelectedIds((prev) => prev.filter((item) => item !== id));
       } else {
         const err = await res.json();
         toast.error(err.error || "Failed to delete feedback");
@@ -409,6 +489,16 @@ export default function FeedbackInboxList({
               📥 Export CSV
             </button>
 
+            {!isReadOnly && items.length > 0 && (
+              <button
+                onClick={() => setShowClearModal(true)}
+                className="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-600 dark:text-rose-400 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Clear all workspace feedback history"
+              >
+                🗑️ Clear All Inbox
+              </button>
+            )}
+
             {/* Clear Filters */}
             {(search || channel || sentiment || statusFilter || themeId || priority) && (
               <button
@@ -422,6 +512,34 @@ export default function FeedbackInboxList({
         </div>
       </div>
 
+      {/* Bulk Action Floating Bar */}
+      {selectedIds.length > 0 && !isReadOnly && (
+        <div className="p-3.5 bg-indigo-600 text-white rounded-xl shadow-lg flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-2">
+            <span className="bg-indigo-700 text-white font-extrabold px-2.5 py-0.5 rounded-full text-xs">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-semibold">messages marked for deletion</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDeleteSelected}
+              disabled={isBulkDeleting}
+              className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
+            >
+              {isBulkDeleting ? "Deleting..." : `🗑️ Delete Selected (${selectedIds.length})`}
+            </button>
+            <button
+              onClick={() => setSelectedIds([])}
+              className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+            >
+              Deselect All
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table List Container */}
       <div className="bg-card-custom border border-card-border rounded-xl shadow-sm overflow-hidden">
         {items.length > 0 ? (
@@ -429,6 +547,17 @@ export default function FeedbackInboxList({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-card-border bg-background/50 text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                  {!isReadOnly && (
+                    <th className="py-3 px-4 w-10 text-center select-none">
+                      <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        onChange={toggleSelectAll}
+                        className="rounded border-card-border text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4 accent-indigo-600"
+                        title="Select/Deselect All Visible Items"
+                      />
+                    </th>
+                  )}
                   <th className="py-3 px-6 w-24">Sentiment</th>
                   <th className="py-3 px-6 w-24">Priority</th>
                   <th className="py-3 px-6">Feedback Content</th>
@@ -439,121 +568,138 @@ export default function FeedbackInboxList({
                 </tr>
               </thead>
               <tbody className="divide-y divide-card-border text-sm text-text-secondary">
-                {items.map((item) => (
-                  <tr key={item.id} className="hover:bg-background/30 transition-colors">
-                    {/* Sentiment Cell */}
-                    <td className="py-4 px-6">
-                      <div className="flex flex-col gap-1">
-                        {getSentimentBadge(item.sentiment)}
-                        <span className="text-[10px] text-text-muted font-bold text-center">
-                          {item.sentimentScore > 0 ? "+" : ""}{item.sentimentScore.toFixed(2)}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Priority Cell */}
-                    <td className="py-4 px-6">
-                      {getPriorityBadge(item.priority)}
-                    </td>
-
-                    {/* Content Cell */}
-                    <td className="py-4 px-6 font-normal text-text-primary leading-relaxed">
-                      <p className="whitespace-pre-wrap max-w-xl">{item.content}</p>
-                      <p className="text-[10px] text-text-muted mt-1.5 flex items-center gap-2">
-                        <span>📅 {new Date(item.createdAt).toLocaleString()}</span>
-                        {item.sourceRef && (
-                          <span className="bg-background px-1.5 py-0.2 rounded border border-card-border text-[9px]">
-                            Ref: {item.sourceRef}
+                {items.map((item) => {
+                  const isSelected = selectedIds.includes(item.id);
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`hover:bg-background/30 transition-colors ${isSelected ? "bg-indigo-500/10 dark:bg-indigo-950/40" : ""
+                        }`}
+                    >
+                      {!isReadOnly && (
+                        <td className="py-4 px-4 text-center select-none">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(item.id)}
+                            className="rounded border-card-border text-indigo-600 focus:ring-indigo-500 cursor-pointer w-4 h-4 accent-indigo-600"
+                          />
+                        </td>
+                      )}
+                      {/* Sentiment Cell */}
+                      <td className="py-4 px-6">
+                        <div className="flex flex-col gap-1">
+                          {getSentimentBadge(item.sentiment)}
+                          <span className="text-[10px] text-text-muted font-bold text-center">
+                            {item.sentimentScore > 0 ? "+" : ""}{item.sentimentScore.toFixed(2)}
                           </span>
-                        )}
-                      </p>
-                    </td>
+                        </div>
+                      </td>
 
-                    {/* Channel & Customer Cell */}
-                    <td className="py-4 px-6">
-                      <div className="space-y-1">
-                        <span className="inline-block text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                          {item.channel}
-                        </span>
-                        {item.customerLabel && (
-                          <p className="text-xs text-text-muted truncate max-w-[150px]">
-                            👤 {item.customerLabel}
-                          </p>
-                        )}
-                      </div>
-                    </td>
+                      {/* Priority Cell */}
+                      <td className="py-4 px-6">
+                        {getPriorityBadge(item.priority)}
+                      </td>
 
-                    {/* Themes Cell */}
-                    <td className="py-4 px-6">
-                      <div className="flex flex-wrap gap-1.5 max-w-[200px]">
-                        {item.feedbackThemes.length > 0 ? (
-                          item.feedbackThemes.map((ft) => (
-                            <span
-                              key={ft.theme.id}
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded truncate ${getThemeBadgeColor(ft.theme.color)}`}
-                              title={`${ft.theme.name} (${Math.round(ft.confidence * 100)}% confidence)`}
-                            >
-                              {ft.theme.name}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-text-muted italic">Unclassified</span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Status Cell */}
-                    <td className="py-4 px-6">
-                      {isReadOnly ? (
-                        <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full uppercase border ${getStatusBadgeColor(item.status)}`}>
-                          {item.status}
-                        </span>
-                      ) : (
-                        <div className="relative inline-block">
-                          <select
-                            disabled={updatingId === item.id || reclassifyingId === item.id}
-                            value={item.status}
-                            onChange={(e) => handleStatusChange(item.id, e.target.value as FeedbackStatus)}
-                            className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase border outline-none bg-card-custom cursor-pointer disabled:opacity-50 transition-colors ${getStatusBadgeColor(item.status)}`}
-                          >
-                            <option value="NEW" className="bg-card-custom text-status-neu">New</option>
-                            <option value="REVIEWED" className="bg-card-custom text-status-info">Reviewed</option>
-                            <option value="ACTIONED" className="bg-card-custom text-status-pos">Actioned</option>
-                          </select>
-                          {updatingId === item.id && (
-                            <span className="absolute -right-6 top-1/2 -translate-y-1/2 flex h-3.5 w-3.5 items-center justify-center">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                      {/* Content Cell */}
+                      <td className="py-4 px-6 font-normal text-text-primary leading-relaxed">
+                        <p className="whitespace-pre-wrap max-w-xl">{item.content}</p>
+                        <p className="text-[10px] text-text-muted mt-1.5 flex items-center gap-2">
+                          <span>📅 {new Date(item.createdAt).toLocaleString()}</span>
+                          {item.sourceRef && (
+                            <span className="bg-background px-1.5 py-0.2 rounded border border-card-border text-[9px]">
+                              Ref: {item.sourceRef}
                             </span>
                           )}
-                          {!isReadOnly && (
-                            <button
-                              disabled={updatingId === item.id || reclassifyingId === item.id}
-                              onClick={() => handleReclassify(item.id)}
-                              className="text-[10px] text-primary hover:text-primary-hover font-semibold block mt-1 hover:underline disabled:opacity-50 text-left cursor-pointer"
-                            >
-                              {reclassifyingId === item.id ? "Classifying..." : "⚡ Re-classify"}
-                            </button>
+                        </p>
+                      </td>
+
+                      {/* Channel & Customer Cell */}
+                      <td className="py-4 px-6">
+                        <div className="space-y-1">
+                          <span className="inline-block text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                            {item.channel}
+                          </span>
+                          {item.customerLabel && (
+                            <p className="text-xs text-text-muted truncate max-w-[150px]">
+                              👤 {item.customerLabel}
+                            </p>
                           )}
                         </div>
-                      )}
-                    </td>
-                    {!isReadOnly && (
-                      <td className="py-4 px-6 text-center">
-                        <button
-                          disabled={updatingId === item.id || reclassifyingId === item.id}
-                          onClick={() => handleDeleteFeedback(item.id)}
-                          className="text-text-muted hover:text-status-neg transition-colors p-1 cursor-pointer disabled:opacity-50"
-                          title="Delete Feedback"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                          </svg>
-                        </button>
                       </td>
-                    )}
-                  </tr>
-                ))}
+
+                      {/* Themes Cell */}
+                      <td className="py-4 px-6">
+                        <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+                          {item.feedbackThemes.length > 0 ? (
+                            item.feedbackThemes.map((ft) => (
+                              <span
+                                key={ft.theme.id}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded truncate ${getThemeBadgeColor(ft.theme.color)}`}
+                                title={`${ft.theme.name} (${Math.round(ft.confidence * 100)}% confidence)`}
+                              >
+                                {ft.theme.name}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-text-muted italic">Unclassified</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Status Cell */}
+                      <td className="py-4 px-6">
+                        {isReadOnly ? (
+                          <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full uppercase border ${getStatusBadgeColor(item.status)}`}>
+                            {item.status}
+                          </span>
+                        ) : (
+                          <div className="relative inline-block">
+                            <select
+                              disabled={updatingId === item.id || reclassifyingId === item.id}
+                              value={item.status}
+                              onChange={(e) => handleStatusChange(item.id, e.target.value as FeedbackStatus)}
+                              className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase border outline-none bg-card-custom cursor-pointer disabled:opacity-50 transition-colors ${getStatusBadgeColor(item.status)}`}
+                            >
+                              <option value="NEW" className="bg-card-custom text-status-neu">New</option>
+                              <option value="REVIEWED" className="bg-card-custom text-status-info">Reviewed</option>
+                              <option value="ACTIONED" className="bg-card-custom text-status-pos">Actioned</option>
+                            </select>
+                            {updatingId === item.id && (
+                              <span className="absolute -right-6 top-1/2 -translate-y-1/2 flex h-3.5 w-3.5 items-center justify-center">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                              </span>
+                            )}
+                            {!isReadOnly && (
+                              <button
+                                disabled={updatingId === item.id || reclassifyingId === item.id}
+                                onClick={() => handleReclassify(item.id)}
+                                className="text-[10px] text-primary hover:text-primary-hover font-semibold block mt-1 hover:underline disabled:opacity-50 text-left cursor-pointer"
+                              >
+                                {reclassifyingId === item.id ? "Classifying..." : "⚡ Re-classify"}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      {!isReadOnly && (
+                        <td className="py-4 px-6 text-center">
+                          <button
+                            disabled={updatingId === item.id || reclassifyingId === item.id}
+                            onClick={() => handleDeleteFeedback(item.id)}
+                            className="text-text-muted hover:text-status-neg transition-colors p-1 cursor-pointer disabled:opacity-50"
+                            title="Delete Feedback"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -600,6 +746,51 @@ export default function FeedbackInboxList({
           </div>
         )}
       </div>
+
+      {/* Clear All Inbox Safety Modal Dialog */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-card-custom border border-card-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-extrabold text-text-primary">Clear All Inbox History?</h3>
+              <p className="text-xs text-text-muted leading-relaxed">
+                This action will permanently delete <strong>ALL feedback records</strong> from your active workspace inbox. This process cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                className="flex-1 bg-card-custom border border-card-border hover:border-text-secondary text-text-secondary font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllInbox}
+                disabled={isPurging}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs py-2.5 rounded-xl transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20"
+              >
+                {isPurging ? (
+                  <>
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                    Clearing...
+                  </>
+                ) : (
+                  "Yes, Delete All"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

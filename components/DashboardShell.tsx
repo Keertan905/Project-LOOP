@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { toast } from "sonner";
+import { Copy, ExternalLink, Share2 } from "lucide-react";
 import SidebarNav from "@/components/SidebarNav";
 import LogoutButton from "@/components/LogoutButton";
 
@@ -16,6 +18,7 @@ interface SidebarLink {
 }
 
 interface DashboardShellProps {
+  workspaceId: string;
   workspaceName: string;
   userName?: string | null;
   userRole: string;
@@ -33,6 +36,7 @@ interface NotificationItem {
 }
 
 export default function DashboardShell({
+  workspaceId,
   workspaceName,
   userName,
   userRole,
@@ -241,6 +245,61 @@ export default function DashboardShell({
 
           {/* Navigation Links */}
           <SidebarNav links={filteredLinks} isCollapsed={isCollapsed} />
+
+          {/* Shareable Public Feedback Link Widget in Left Sidebar */}
+          {workspaceId && (
+            !isCollapsed ? (
+              <div className="mx-3 my-2 p-3 rounded-xl bg-gradient-to-b from-indigo-950/40 to-slate-900 border border-indigo-500/20 space-y-2 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
+                    <Share2 className="w-3 h-3 text-indigo-400" />
+                    Public Feedback Form
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-tight">
+                  Collect client feedback directly without account creation.
+                </p>
+                <div className="flex items-center gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${window.location.origin}/f/${workspaceId}`;
+                      navigator.clipboard.writeText(url);
+                      toast.success("Public feedback link copied to clipboard!");
+                    }}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copy Link</span>
+                  </button>
+                  <a
+                    href={`/f/${workspaceId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center justify-center"
+                    title="Open Public Form in new tab"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center py-2 animate-fade-in">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = `${window.location.origin}/f/${workspaceId}`;
+                    navigator.clipboard.writeText(url);
+                    toast.success("Public feedback link copied to clipboard!");
+                  }}
+                  className="p-2 rounded-xl bg-indigo-950/60 border border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-900/60 transition-all cursor-pointer"
+                  title="Copy Public Feedback Link"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
+              </div>
+            )
+          )}
         </div>
 
         {/* Footer User Card */}

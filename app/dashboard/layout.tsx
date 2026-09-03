@@ -121,6 +121,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell
+      workspaceId={session.user.workspaceId}
       workspaceName={workspace?.name || "Workspace"}
       userName={session.user.name}
       userRole={session.user.role}

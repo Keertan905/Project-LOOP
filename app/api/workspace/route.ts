@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { logActivity } from "@/lib/activity";
 
 const updateWorkspaceSchema = z.object({
   name: z.string().min(2, "Workspace name must be at least 2 characters"),
@@ -62,6 +63,13 @@ export async function PATCH(req: NextRequest) {
       where: { id: session.user.workspaceId },
       data: { name: validatedData.name },
     });
+
+    await logActivity(
+      "Workspace Name Change",
+      session.user.name || session.user.email || "Unknown User",
+      `Renamed workspace to "${validatedData.name}"`,
+      session.user.workspaceId
+    );
 
     return NextResponse.json(updatedWorkspace);
   } catch (error: unknown) {
